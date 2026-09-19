@@ -7,3 +7,4 @@ storage/telegram/*
 .phpunit.result.cache
 .phpunit.cache/
 deploy/*.zip
+deploy/dist/
