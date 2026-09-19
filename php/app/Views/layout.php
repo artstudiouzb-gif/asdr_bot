@@ -16,15 +16,10 @@
     <?php
     $menu = [
         '/' => 'Обзор',
+        '/accounts' => 'Аккаунты',
         '/sources' => 'Источники',
         '/destinations' => 'Назначения',
         '/routes' => 'Маршруты',
-        '/rules' => 'Правила очистки',
-        '/signatures' => 'Подписи',
-        '/filters' => 'Фильтры',
-        '/preview' => 'Предпросмотр',
-        '/logs' => 'Журнал',
-        '/settings' => 'Настройки',
     ];
     $active = $activePath ?? '/';
     foreach ($menu as $href => $label):

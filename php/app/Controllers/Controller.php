@@ -32,6 +32,30 @@ abstract class Controller
         return null;
     }
 
+    protected function back(string $path, string $message = '', string $error = ''): Response
+    {
+        $query = [];
+        if ($message !== '') {
+            $query['m'] = $message;
+        }
+        if ($error !== '') {
+            $query['e'] = $error;
+        }
+        return Response::redirect($path . ($query === [] ? '' : '?' . http_build_query($query)));
+    }
+
+    /** Ставит задание воркеру: панель сама к Telegram не обращается. */
+    protected function queueCommand(int $accountId, string $command, array $payload = []): void
+    {
+        \App\Core\Db::insert('tg_commands', [
+            'account_id' => $accountId,
+            'command'    => $command,
+            'payload'    => $payload === [] ? null : json_encode($payload, JSON_UNESCAPED_UNICODE),
+            'status'     => 'queued',
+            'created_at' => \App\Core\Db::now(),
+        ]);
+    }
+
     protected function view(string $template, array $data = [], int $status = 200): Response
     {
         $user = $this->auth->user();

@@ -57,3 +57,5 @@ button.danger{background:var(--err);color:#fff}
   aside nav{flex-direction:row;flex-wrap:wrap}
   main{padding:18px 16px 50px}
 }
+.check{display:flex;align-items:center;gap:8px;margin:10px 0;font-size:14px}
+.check input{width:16px;height:16px}
