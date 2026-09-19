@@ -16,12 +16,12 @@
           <td><?= $source['is_active'] ? '<span class="badge ok">активен</span>' : '<span class="badge muted">выключен</span>' ?></td>
           <td>
             <div style="display:flex;gap:6px;flex-wrap:wrap">
-              <a class="badge muted" href="/sources?edit=<?= (int)$source['id'] ?>">изменить</a>
-              <form method="post" action="/sources/<?= (int)$source['id'] ?>/test"><?= $csrf ?>
+              <a class="badge muted" href="<?= url('/sources?edit=') ?><?= (int)$source['id'] ?>">изменить</a>
+              <form method="post" action="<?= url('/sources/') ?><?= (int)$source['id'] ?>/test"><?= $csrf ?>
                 <button class="ghost" type="submit">Проверить</button></form>
-              <form method="post" action="/sources/<?= (int)$source['id'] ?>/toggle"><?= $csrf ?>
+              <form method="post" action="<?= url('/sources/') ?><?= (int)$source['id'] ?>/toggle"><?= $csrf ?>
                 <button class="ghost" type="submit"><?= $source['is_active'] ? 'Выключить' : 'Включить' ?></button></form>
-              <form method="post" action="/sources/<?= (int)$source['id'] ?>/delete"
+              <form method="post" action="<?= url('/sources/') ?><?= (int)$source['id'] ?>/delete"
                     onsubmit="return confirm('Удалить источник вместе с его маршрутами и историей?')"><?= $csrf ?>
                 <button class="danger" type="submit">Удалить</button></form>
             </div>
@@ -34,7 +34,7 @@
 
 <div class="card">
   <h2><?= $edit ? 'Изменить источник' : 'Добавить источник' ?></h2>
-  <form method="post" action="/sources/save">
+  <form method="post" action="<?= url('/sources/save') ?>">
     <?= $csrf ?>
     <input type="hidden" name="id" value="<?= (int)($edit['id'] ?? 0) ?>">
     <label for="name">Название</label>
@@ -59,7 +59,7 @@
     </div>
     <div class="actions">
       <button type="submit"><?= $edit ? 'Сохранить' : 'Добавить' ?></button>
-      <?php if ($edit): ?><a class="badge muted" href="/sources" style="align-self:center">отмена</a><?php endif; ?>
+      <?php if ($edit): ?><a class="badge muted" href="<?= url('/sources') ?>" style="align-self:center">отмена</a><?php endif; ?>
     </div>
   </form>
 </div>

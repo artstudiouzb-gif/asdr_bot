@@ -13,6 +13,7 @@ final class Request
         public readonly array $post,
         public readonly array $server,
         public readonly array $cookies,
+        public readonly string $basePath = '',
     ) {
     }
 
@@ -26,6 +27,8 @@ final class Request
         }
         $path = '/' . trim((string)$path, '/');
 
+        Url::setBase($base);
+
         return new self(
             strtoupper((string)($_SERVER['REQUEST_METHOD'] ?? 'GET')),
             $path === '/' ? '/' : rtrim($path, '/'),
@@ -33,6 +36,7 @@ final class Request
             $_POST,
             $_SERVER,
             $_COOKIE,
+            Url::base(),
         );
     }
 

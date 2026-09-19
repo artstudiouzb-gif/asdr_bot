@@ -6,7 +6,7 @@
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <meta name="robots" content="noindex">
 <title><?= e($title ?? 'Репостер') ?></title>
-<link rel="stylesheet" href="/assets/app.css">
+<link rel="stylesheet" href="<?= url('/assets/app.css') ?>">
 </head>
 <body>
 <div class="shell">
@@ -33,7 +33,7 @@
   <header class="top">
     <h1><?= e($title ?? 'Обзор') ?></h1>
     <?php if (!empty($user)): ?>
-      <form method="post" action="/logout">
+      <form method="post" action="<?= url('/logout') ?>">
         <?= $csrf ?? '' ?>
         <span class="muted"><?= e($user['username']) ?></span>
         <button class="ghost" type="submit">Выйти</button>

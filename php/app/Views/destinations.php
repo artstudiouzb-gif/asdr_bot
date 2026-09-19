@@ -19,12 +19,12 @@
           <td><?= $destination['is_active'] ? '<span class="badge ok">активно</span>' : '<span class="badge muted">выключено</span>' ?></td>
           <td>
             <div style="display:flex;gap:6px;flex-wrap:wrap">
-              <a class="badge muted" href="/destinations?edit=<?= (int)$destination['id'] ?>">изменить</a>
-              <form method="post" action="/destinations/<?= (int)$destination['id'] ?>/test"><?= $csrf ?>
+              <a class="badge muted" href="<?= url('/destinations?edit=') ?><?= (int)$destination['id'] ?>">изменить</a>
+              <form method="post" action="<?= url('/destinations/') ?><?= (int)$destination['id'] ?>/test"><?= $csrf ?>
                 <button class="ghost" type="submit">Проверить</button></form>
-              <form method="post" action="/destinations/<?= (int)$destination['id'] ?>/toggle"><?= $csrf ?>
+              <form method="post" action="<?= url('/destinations/') ?><?= (int)$destination['id'] ?>/toggle"><?= $csrf ?>
                 <button class="ghost" type="submit"><?= $destination['is_active'] ? 'Выключить' : 'Включить' ?></button></form>
-              <form method="post" action="/destinations/<?= (int)$destination['id'] ?>/delete"
+              <form method="post" action="<?= url('/destinations/') ?><?= (int)$destination['id'] ?>/delete"
                     onsubmit="return confirm('Удалить назначение и его маршруты?')"><?= $csrf ?>
                 <button class="danger" type="submit">Удалить</button></form>
             </div>
@@ -37,7 +37,7 @@
 
 <div class="card">
   <h2><?= $edit ? 'Изменить назначение' : 'Добавить назначение' ?></h2>
-  <form method="post" action="/destinations/save">
+  <form method="post" action="<?= url('/destinations/save') ?>">
     <?= $csrf ?>
     <input type="hidden" name="id" value="<?= (int)($edit['id'] ?? 0) ?>">
     <label for="name">Название</label>
@@ -68,7 +68,7 @@
     </div>
     <div class="actions">
       <button type="submit"><?= $edit ? 'Сохранить' : 'Добавить' ?></button>
-      <?php if ($edit): ?><a class="badge muted" href="/destinations" style="align-self:center">отмена</a><?php endif; ?>
+      <?php if ($edit): ?><a class="badge muted" href="<?= url('/destinations') ?>" style="align-self:center">отмена</a><?php endif; ?>
     </div>
   </form>
 </div>

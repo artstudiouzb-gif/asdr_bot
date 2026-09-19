@@ -6,3 +6,4 @@ storage/telegram/*
 !storage/**/.gitkeep
 .phpunit.result.cache
 .phpunit.cache/
+deploy/*.zip

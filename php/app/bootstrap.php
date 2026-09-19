@@ -49,6 +49,12 @@ set_exception_handler(static function (Throwable $e): void {
         : '<p>Подробности записаны в журнал.</p>';
 });
 
+/** Ссылка с учётом подпапки, в которой стоит панель. */
+function url(string $path): string
+{
+    return App\Core\Url::to($path);
+}
+
 /** Экранирование для шаблонов. */
 function e(mixed $value): string
 {

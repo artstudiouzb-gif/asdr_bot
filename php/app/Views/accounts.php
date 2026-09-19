@@ -36,19 +36,19 @@ $statusBadge = static function (string $status): string {
               <div class="muted"><?= e(display_time($account['last_check_at'])) ?></div></td>
           <td>
             <?php if ($account['status'] === 'awaiting_code'): ?>
-              <form method="post" action="/accounts/<?= (int)$account['id'] ?>/code" style="display:flex;gap:6px">
+              <form method="post" action="<?= url('/accounts/') ?><?= (int)$account['id'] ?>/code" style="display:flex;gap:6px">
                 <?= $csrf ?>
                 <input name="code" inputmode="numeric" placeholder="код из Telegram" required style="max-width:170px">
                 <button type="submit">Отправить</button>
               </form>
             <?php elseif ($account['status'] === 'awaiting_password'): ?>
-              <form method="post" action="/accounts/<?= (int)$account['id'] ?>/password" style="display:flex;gap:6px">
+              <form method="post" action="<?= url('/accounts/') ?><?= (int)$account['id'] ?>/password" style="display:flex;gap:6px">
                 <?= $csrf ?>
                 <input name="password" type="password" placeholder="пароль 2FA" required style="max-width:170px">
                 <button type="submit">Отправить</button>
               </form>
             <?php else: ?>
-              <form method="post" action="/accounts/<?= (int)$account['id'] ?>/logout"
+              <form method="post" action="<?= url('/accounts/') ?><?= (int)$account['id'] ?>/logout"
                     onsubmit="return confirm('Отключить аккаунт и удалить файл сессии?')">
                 <?= $csrf ?>
                 <button class="ghost" type="submit">Отключить</button>
@@ -65,7 +65,7 @@ $statusBadge = static function (string $status): string {
   <h2>Подключить аккаунт</h2>
   <p class="muted">Используйте отдельный номер, не личный. После отправки формы воркер запросит код,
      он придёт в Telegram на этот номер — введите его в таблице выше.</p>
-  <form method="post" action="/accounts">
+  <form method="post" action="<?= url('/accounts') ?>">
     <?= $csrf ?>
     <label for="label">Название</label>
     <input id="label" name="label" placeholder="Читатель новостей" required>

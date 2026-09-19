@@ -32,7 +32,7 @@ final class Response
 
     public static function redirect(string $location, array $cookies = []): self
     {
-        return new self(303, '', ['Location' => $location], $cookies);
+        return new self(303, '', ['Location' => Url::to($location)], $cookies);
     }
 
     public function send(): void

@@ -63,7 +63,7 @@ try {
 
 ?><!doctype html>
 <html lang="ru"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Установка</title><link rel="stylesheet" href="/assets/app.css"></head>
+<title>Установка</title><link rel="stylesheet" href="assets/app.css"></head>
 <body><div class="login" style="max-width:520px">
 <div class="card">
   <h2>Установка репостера</h2>
@@ -82,7 +82,7 @@ try {
   <h2 style="margin-top:22px">2. Администратор</h2>
   <?php if ($adminsExist): ?>
     <p class="muted">Администратор уже создан. <b>Удалите install.php с хостинга</b> и войдите в
-      <a href="/login">панель</a>.</p>
+      <a href="login">панель</a>.</p>
   <?php else: ?>
     <form method="post">
       <input type="hidden" name="key" value="<?= e($givenKey) ?>">

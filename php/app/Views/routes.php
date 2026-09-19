@@ -21,10 +21,10 @@
           <td><?= $route['is_active'] ? '<span class="badge ok">активен</span>' : '<span class="badge muted">выключен</span>' ?></td>
           <td>
             <div style="display:flex;gap:6px;flex-wrap:wrap">
-              <a class="badge muted" href="/routes?edit=<?= (int)$route['id'] ?>">изменить</a>
-              <form method="post" action="/routes/<?= (int)$route['id'] ?>/toggle"><?= $csrf ?>
+              <a class="badge muted" href="<?= url('/routes?edit=') ?><?= (int)$route['id'] ?>">изменить</a>
+              <form method="post" action="<?= url('/routes/') ?><?= (int)$route['id'] ?>/toggle"><?= $csrf ?>
                 <button class="ghost" type="submit"><?= $route['is_active'] ? 'Выключить' : 'Включить' ?></button></form>
-              <form method="post" action="/routes/<?= (int)$route['id'] ?>/delete"
+              <form method="post" action="<?= url('/routes/') ?><?= (int)$route['id'] ?>/delete"
                     onsubmit="return confirm('Удалить маршрут?')"><?= $csrf ?>
                 <button class="danger" type="submit">Удалить</button></form>
             </div>
@@ -38,10 +38,10 @@
 <div class="card">
   <h2><?= $edit ? 'Изменить маршрут' : 'Создать маршрут' ?></h2>
   <?php if ($sources === [] || $destinations === []): ?>
-    <p class="muted">Сначала добавьте хотя бы один <a href="/sources">источник</a> и одно
-      <a href="/destinations">назначение</a>.</p>
+    <p class="muted">Сначала добавьте хотя бы один <a href="<?= url('/sources') ?>">источник</a> и одно
+      <a href="<?= url('/destinations') ?>">назначение</a>.</p>
   <?php else: ?>
-  <form method="post" action="/routes/save">
+  <form method="post" action="<?= url('/routes/save') ?>">
     <?= $csrf ?>
     <input type="hidden" name="id" value="<?= (int)($edit['id'] ?? 0) ?>">
     <div class="row" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:0 16px">
@@ -101,7 +101,7 @@
     </div>
     <div class="actions">
       <button type="submit"><?= $edit ? 'Сохранить' : 'Создать' ?></button>
-      <?php if ($edit): ?><a class="badge muted" href="/routes" style="align-self:center">отмена</a><?php endif; ?>
+      <?php if ($edit): ?><a class="badge muted" href="<?= url('/routes') ?>" style="align-self:center">отмена</a><?php endif; ?>
     </div>
   </form>
   <?php endif; ?>
