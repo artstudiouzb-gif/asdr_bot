@@ -9,7 +9,7 @@ import time
 from pathlib import Path
 from typing import Sequence
 
-from telethon import TelegramClient
+from telethon import TelegramClient, events, utils
 from telethon.errors import ChannelPrivateError, FloodWaitError, RPCError
 from telethon.extensions import html as tg_html
 from telethon.sessions import StringSession
@@ -57,6 +57,9 @@ class Reposter:
         self.bot_client: TelegramClient | None = None
         self._target_entity = None
         self._deadline = time.monotonic() + cfg.max_runtime
+        self.watching = False              # в режиме слежения лимит времени не действует
+        self._source_by_peer: dict[int, str] = {}
+        self._publish_lock = asyncio.Lock()
 
     # --- жизненный цикл -----------------------------------------------------
     async def prepare(self) -> None:
@@ -77,7 +80,7 @@ class Reposter:
 
     @property
     def out_of_time(self) -> bool:
-        return time.monotonic() >= self._deadline
+        return not self.watching and time.monotonic() >= self._deadline
 
     # --- основной цикл ------------------------------------------------------
     async def poll_once(self, *, dry_run: bool = False, limit: int | None = None) -> int:
@@ -98,6 +101,72 @@ class Reposter:
             except RPCError as exc:
                 log.error("Ошибка Telegram на канале %s: %s", source, exc)
         return published
+
+
+    # --- режим реального времени -------------------------------------------
+    async def watch(self, safety_interval: int = 600) -> None:
+        """Слушает каналы через updates Telegram: пост уходит в канал сразу.
+
+        Опрос остаётся как страховка — на случай, если соединение отвалилось и
+        часть апдейтов прошла мимо.
+        """
+        self.watching = True
+        entities = []
+        for source in self.cfg.sources:
+            entity = await self.client.get_entity(source)
+            entities.append(entity)
+            self._source_by_peer[utils.get_peer_id(entity)] = source_key(source)
+
+        await self._catch_up("старт")
+
+        @self.client.on(events.NewMessage(chats=entities))
+        async def on_new_message(event):  # noqa: ANN001
+            if getattr(event.message, "grouped_id", None):
+                return  # альбом придёт отдельным событием целиком
+            await self._handle_live([event.message])
+
+        @self.client.on(events.Album(chats=entities))
+        async def on_album(event):  # noqa: ANN001
+            await self._handle_live(list(event.messages))
+
+        log.info("Слежу за каналами: %s", ", ".join(str(s) for s in self.cfg.sources))
+        safety = asyncio.create_task(self._safety_loop(safety_interval))
+        try:
+            await self.client.run_until_disconnected()
+        finally:
+            safety.cancel()
+            self.watching = False
+
+    async def _handle_live(self, messages: list[Message]) -> None:
+        key = self._source_by_peer.get(messages[0].chat_id or 0)
+        if not key:
+            return
+        try:
+            async with self._publish_lock:
+                await self._publish_group(key, messages, dry_run=False)
+                self.storage.set_last_id(key, max(m.id for m in messages))
+                if self.cfg.delay_between_posts:
+                    await asyncio.sleep(self.cfg.delay_between_posts)
+        except FloodWaitError as exc:
+            log.warning("FloodWait %sс — жду", exc.seconds)
+            await asyncio.sleep(exc.seconds + 1)
+        except RPCError as exc:
+            log.error("Ошибка Telegram при публикации %s/%s: %s", key, messages[0].id, exc)
+        except Exception:  # noqa: BLE001 — слежение не должно падать из-за одного поста
+            log.exception("Не смог опубликовать %s/%s", key, messages[0].id)
+
+    async def _safety_loop(self, interval: int) -> None:
+        while True:
+            await asyncio.sleep(max(60, interval))
+            await self._catch_up("страховочный опрос")
+
+    async def _catch_up(self, reason: str) -> None:
+        try:
+            count = await self.poll_once()
+            if count:
+                log.info("%s: добрал пропущенных постов: %s", reason, count)
+        except Exception:  # noqa: BLE001
+            log.exception("%s не удался", reason)
 
     async def _process_source(self, source, *, dry_run: bool, limit: int | None, budget: int) -> int:
         key = source_key(source)
@@ -130,7 +199,8 @@ class Reposter:
             if self.storage.is_posted(key, head.id):
                 self.storage.set_last_id(key, group[-1].id)
                 continue
-            ok = await self._publish_group(key, group, dry_run=dry_run)
+            async with self._publish_lock:
+                ok = await self._publish_group(key, group, dry_run=dry_run)
             self.storage.set_last_id(key, group[-1].id)
             if ok:
                 published += 1

@@ -119,3 +119,35 @@ def single_instance(lock_path: Path, stale_after: int = 900):
         yield
     finally:
         lock_path.unlink(missing_ok=True)
+
+
+def _process_alive(pid: int) -> bool:
+    if pid <= 0:
+        return False
+    try:
+        os.kill(pid, 0)
+    except ProcessLookupError:
+        return False
+    except PermissionError:
+        return True
+    return True
+
+
+@contextmanager
+def daemon_lock(pid_path: Path):
+    """Лок для долгоживущего процесса (`watch`): в файле pid, живость проверяется
+    сигналом 0 — зависший файл от убитого процесса не блокирует запуск."""
+    pid_path.parent.mkdir(parents=True, exist_ok=True)
+    if pid_path.exists():
+        try:
+            old = int(pid_path.read_text().strip() or 0)
+        except (ValueError, OSError):
+            old = 0
+        if _process_alive(old):
+            raise AlreadyRunning(f"Слежение уже запущено (pid {old})")
+        pid_path.unlink(missing_ok=True)
+    pid_path.write_text(str(os.getpid()))
+    try:
+        yield
+    finally:
+        pid_path.unlink(missing_ok=True)

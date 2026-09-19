@@ -9,7 +9,7 @@ import sys
 from pathlib import Path
 
 from .config import BASE_DIR, Config
-from .storage import AlreadyRunning, Storage, single_instance
+from .storage import AlreadyRunning, Storage, daemon_lock, single_instance
 
 
 def setup_logging(cfg: Config | None, verbose: bool = False) -> None:
@@ -57,23 +57,44 @@ def cmd_poll(args) -> int:
     return 0
 
 
+async def _run_watch(cfg: Config, interval: int) -> None:
+    from .reposter import Reposter, build_client
+
+    storage = Storage(cfg.db_path)
+    client = build_client(cfg)
+    await client.connect()
+    reposter = Reposter(cfg, storage, client)
+    try:
+        await reposter.prepare()
+        await reposter.watch(safety_interval=interval)
+    finally:
+        await reposter.close()
+        storage.close()
+
+
 def cmd_watch(args) -> int:
-    """Бесконечный цикл (VPS / `screen`), интервал в секундах."""
-    cfg = Config.load()
-    setup_logging(cfg, args.verbose)
+    """Слежение в реальном времени: пост выходит сразу после публикации в источнике."""
     import time
 
-    while True:
-        try:
-            with single_instance(cfg.lock_path):
-                asyncio.run(_run_poll(cfg, dry_run=False, limit=None))
-        except AlreadyRunning as exc:
-            logging.info("%s", exc)
-        except KeyboardInterrupt:
-            return 0
-        except Exception:  # noqa: BLE001 — цикл не должен падать из-за одной ошибки
-            logging.exception("Ошибка в цикле, продолжаю")
-        time.sleep(args.interval)
+    cfg = Config.load()
+    setup_logging(cfg, args.verbose)
+    try:
+        with daemon_lock(cfg.watch_pid_path):
+            attempt = 0
+            while True:
+                try:
+                    asyncio.run(_run_watch(cfg, args.interval))
+                    return 0
+                except (KeyboardInterrupt, SystemExit):
+                    return 0
+                except Exception:  # noqa: BLE001 — демон переживает обрывы связи
+                    attempt += 1
+                    pause = min(300, 5 * 2 ** min(attempt, 6))
+                    logging.exception("Слежение прервалось, перезапуск через %sс", pause)
+                    time.sleep(pause)
+    except AlreadyRunning as exc:
+        logging.info("%s", exc)
+        return 0
 
 
 def cmd_login(args) -> int:
@@ -178,8 +199,9 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--limit", type=int, help="сколько сообщений тянуть из канала")
     p.set_defaults(func=cmd_poll)
 
-    p = sub.add_parser("watch", help="бесконечный цикл (VPS)")
-    p.add_argument("--interval", type=int, default=60, help="пауза между проходами, сек")
+    p = sub.add_parser("watch", help="слежение в реальном времени (демон)")
+    p.add_argument("--interval", type=int, default=600,
+                   help="период страховочного опроса, сек (на случай пропущенных апдейтов)")
     p.set_defaults(func=cmd_watch)
 
     p = sub.add_parser("check", help="проверить доступы")

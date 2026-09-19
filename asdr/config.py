@@ -22,9 +22,9 @@ def _load_dotenv() -> None:
                 if not line or line.startswith("#") or "=" not in line:
                     continue
                 key, _, value = line.partition("=")
-                os.environ.setdefault(key.strip(), value.strip().strip("'\""))
+                os.environ[key.strip()] = value.strip().strip("'\"")
         return
-    load_dotenv(BASE_DIR / ".env")
+    load_dotenv(BASE_DIR / ".env", override=True)
 
 
 def _get(name: str, default: str = "") -> str:
@@ -66,6 +66,24 @@ def _read_patterns(path: Path) -> tuple[str, ...]:
     return tuple(lines)
 
 
+def _read_footer() -> str:
+    """Своя подпись в конце поста.
+
+    Приоритет у patterns/footer.html — там удобно держать многострочный HTML
+    со ссылками; FOOTER в .env остаётся как запасной вариант.
+    """
+    path = BASE_DIR / "patterns" / "footer.html"
+    if path.exists():
+        lines = [
+            line for line in path.read_text(encoding="utf-8").splitlines()
+            if not line.strip().startswith("#")
+        ]
+        text = "\n".join(lines).strip()
+        if text:
+            return text
+    return _get("FOOTER").replace("\\n", "\n")
+
+
 def _normalize_source(value: str) -> str | int:
     value = value.strip()
     if not value:
@@ -87,6 +105,8 @@ class Config:
     sources: tuple[str | int, ...]
     target: str | int
     bot_token: str = ""
+    bot_username: str = ""
+    admin_ids: tuple[str, ...] = ()
     mode: str = "copy"                 # copy | forward
     data_dir: Path = BASE_DIR / "data"
     # что и как публикуем
@@ -114,6 +134,10 @@ class Config:
     @property
     def lock_path(self) -> Path:
         return self.data_dir / "asdr.lock"
+
+    @property
+    def watch_pid_path(self) -> Path:
+        return self.data_dir / "asdr-watch.pid"
 
     @property
     def session_path(self) -> Path:
@@ -162,7 +186,7 @@ class Config:
             unwrap_blocked_links=_get_bool("UNWRAP_BLOCKED_LINKS", True),
             drop_subscribe_lines=_get_bool("DROP_SUBSCRIBE_LINES", True),
             drop_hashtags=_get_bool("DROP_HASHTAGS", False),
-            footer=_get("FOOTER").replace("\\n", "\n"),
+            footer=_read_footer(),
         )
 
         return cls(
@@ -172,6 +196,8 @@ class Config:
             sources=sources,
             target=_normalize_source(target_raw) if not target_raw.lstrip("-").isdigit() else int(target_raw),
             bot_token=_get("BOT_TOKEN"),
+            bot_username=_get("BOT_USERNAME").lstrip("@"),
+            admin_ids=_get_list("ADMIN_IDS"),
             mode=_get("MODE", "copy").lower(),
             data_dir=data_dir,
             include_keywords=_get_list("INCLUDE_KEYWORDS"),

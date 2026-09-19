@@ -1,0 +1,16 @@
+# systemd-юнит для VPS: sudo cp asdr-bot.service /etc/systemd/system/
+# sudo systemctl enable --now asdr-bot
+[Unit]
+Description=asdr_bot — репостер Telegram-каналов
+After=network-online.target
+
+[Service]
+Type=simple
+User=asdr
+WorkingDirectory=/opt/asdr_bot
+ExecStart=/usr/bin/python3 -m asdr watch
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target
