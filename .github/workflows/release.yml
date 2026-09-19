@@ -1,0 +1,90 @@
+name: Сборка релиза
+
+on:
+  push:
+    branches: [claude/lucid-wozniak-h40v8i, main]
+    paths: ['php/**', 'docs/DEPLOYMENT.md', '.github/workflows/release.yml']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  tests:
+    name: Тесты
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.2'
+          extensions: mbstring, json, dom, fileinfo, gmp, zip, curl, pdo_mysql
+          coverage: none
+      - name: Установка зависимостей
+        working-directory: php
+        run: composer install --no-interaction --no-progress
+      - name: PHPUnit
+        working-directory: php
+        run: php vendor/bin/phpunit
+
+  build:
+    name: Сборка и публикация ветки deploy
+    needs: tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.2'
+          extensions: mbstring, json, dom, fileinfo, gmp, zip, curl, pdo_mysql
+          coverage: none
+
+      - name: Зависимости без dev
+        working-directory: php
+        run: |
+          composer install --no-dev --prefer-dist --no-interaction --no-progress
+          composer dump-autoload -o --no-dev
+
+      - name: Сборка релиза
+        working-directory: php
+        run: php bin/build-release.php
+
+      - name: Архив как артефакт сборки
+        uses: actions/upload-artifact@v4
+        with:
+          name: reposter-release
+          path: php/deploy/reposter-release.zip
+          retention-days: 30
+
+      - name: Публикация ветки deploy
+        run: |
+          tree=$(mktemp -d)
+          cp -a php/deploy/dist/reposter/. "$tree/"
+          cp -a php/deploy/dist/panel "$tree/panel"
+          cp docs/DEPLOYMENT.md "$tree/DEPLOYMENT.md"
+          cat > "$tree/.gitignore" <<'EOF'
+          .env
+          storage/logs/*.log
+          storage/tmp/*
+          storage/telegram/*
+          !storage/**/.gitkeep
+          EOF
+          cat > "$tree/README.md" <<'EOF'
+          # Ветка deploy — готовое к установке дерево
+
+          Собирается автоматически из `php/` рабочей ветки, править её руками не нужно.
+          Установка описана в DEPLOYMENT.md; файл `.env` создаётся на хостинге и в git не попадает.
+          EOF
+          cd "$tree"
+          git init -q -b deploy
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -q -m "Релиз из ${GITHUB_SHA:0:7}"
+          git push -qf "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git" deploy
+
+      - name: Релиз по тегу
+        if: startsWith(github.ref, 'refs/tags/v')
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh release create "${GITHUB_REF_NAME}" php/deploy/reposter-release.zip --generate-notes
