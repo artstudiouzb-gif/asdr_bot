@@ -31,7 +31,17 @@ final class Migrator
                 continue;
             }
             foreach ($this->statements((string)file_get_contents($file)) as $statement) {
-                Db::pdo()->exec($statement);
+                try {
+                    Db::pdo()->exec($statement);
+                } catch (\PDOException $e) {
+                    // без куска запроса такую ошибку ищут вслепую
+                    throw new \RuntimeException(sprintf(
+                        "%s: %s\n\nЗапрос: %s…",
+                        basename($file),
+                        $e->getMessage(),
+                        mb_substr(preg_replace('/\s+/', ' ', $statement) ?? $statement, 0, 200)
+                    ), 0, $e);
+                }
             }
             Db::insert('migrations', ['version' => $version, 'applied_at' => Db::now()]);
             $done[] = $version;
