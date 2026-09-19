@@ -1,0 +1,8 @@
+vendor/
+.env
+storage/logs/*
+storage/tmp/*
+storage/telegram/*
+!storage/**/.gitkeep
+.phpunit.result.cache
+.phpunit.cache/
