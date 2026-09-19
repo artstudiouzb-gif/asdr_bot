@@ -51,6 +51,15 @@ foreach ($loaders as $file) {
 }
 copy($root . '/deploy/panel/.htaccess', $dist . '/panel/.htaccess');
 copy($root . '/deploy/panel/.htaccess', $dist . '/reposter/.htaccess');
+
+// Те же загрузчики в корне архива: если распаковать его целиком в папку сайта,
+// адрес этой папки тоже открывает панель.
+foreach ($loaders as $file) {
+    copy($root . '/deploy/panel/' . $file, $dist . '/' . $file);
+}
+copy($root . '/deploy/panel/.htaccess', $dist . '/.htaccess');
+mkdir($dist . '/assets', 0755, true);
+copy($root . '/public_html/assets/app.css', $dist . '/assets/app.css');
 mkdir($dist . '/panel/assets', 0755, true);
 mkdir($dist . '/reposter/assets', 0755, true);
 copy($root . '/public_html/assets/app.css', $dist . '/panel/assets/app.css');

@@ -20,9 +20,8 @@ final class Request
     public static function fromGlobals(): self
     {
         $path = parse_url((string)($_SERVER['REQUEST_URI'] ?? '/'), PHP_URL_PATH) ?: '/';
-        $base = rtrim((string)($_SERVER['SCRIPT_NAME'] ?? ''), '/');
-        $base = str_ends_with($base, '/index.php') ? substr($base, 0, -10) : dirname($base);
-        if ($base !== '' && $base !== '/' && str_starts_with($path, $base)) {
+        $base = Url::detect($_SERVER);
+        if ($base !== '' && str_starts_with($path, $base)) {
             $path = substr($path, strlen($base));
         }
         $path = '/' . trim((string)$path, '/');

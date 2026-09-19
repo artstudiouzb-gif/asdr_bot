@@ -19,6 +19,14 @@ final class Url
         return self::$base;
     }
 
+    /** Базовый путь из SCRIPT_NAME: /panel/index.php → /panel, /bot/install.php → /bot */
+    public static function detect(array $server): string
+    {
+        $script = (string)($server['SCRIPT_NAME'] ?? '');
+        $base = rtrim(str_contains($script, '.php') ? dirname($script) : $script, '/');
+        return $base === '.' || $base === '/' ? '' : $base;
+    }
+
     public static function to(string $path): string
     {
         if ($path === '' || $path[0] !== '/') {

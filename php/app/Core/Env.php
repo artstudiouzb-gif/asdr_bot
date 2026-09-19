@@ -30,6 +30,12 @@ final class Env
         }
     }
 
+    public static function reload(string $path): void
+    {
+        self::$values = [];
+        self::load($path);
+    }
+
     public static function get(string $key, ?string $default = null): ?string
     {
         if (!self::$loaded) {
