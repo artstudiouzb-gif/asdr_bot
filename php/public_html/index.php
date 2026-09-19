@@ -6,6 +6,8 @@ use App\Controllers\AccountsController;
 use App\Controllers\AuthController;
 use App\Controllers\DashboardController;
 use App\Controllers\DestinationsController;
+use App\Controllers\LogsController;
+use App\Controllers\PreviewController;
 use App\Controllers\RoutesController;
 use App\Controllers\SourcesController;
 use App\Core\Request;
@@ -50,5 +52,13 @@ $router->get('/routes', [$routes, 'index']);
 $router->post('/routes/save', [$routes, 'save']);
 $router->post('/routes/{id}/toggle', [$routes, 'toggle']);
 $router->post('/routes/{id}/delete', [$routes, 'delete']);
+
+$preview = new PreviewController($request);
+$router->get('/preview', [$preview, 'index']);
+$router->post('/preview', [$preview, 'process']);
+
+$logs = new LogsController($request);
+$router->get('/logs', [$logs, 'index']);
+$router->post('/logs/{id}/retry', [$logs, 'retry']);
 
 $router->dispatch($request)->send();

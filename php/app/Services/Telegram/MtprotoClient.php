@@ -10,6 +10,7 @@ use danog\MadelineProto\EventHandler\Message;
 use danog\MadelineProto\Logger as MadelineLogger;
 use danog\MadelineProto\ParseMode;
 use danog\MadelineProto\Settings;
+use danog\MadelineProto\StrTools;
 
 /**
  * Обёртка над MadelineProto.
@@ -128,9 +129,9 @@ final class MtprotoClient
     }
 
     /**
-     * Новые сообщения канала после $minId, от старых к новым.
+     * Новые сообщения канала после $minId, от старых к новым, в исходном виде.
      *
-     * @return array<int, Message>
+     * @return array<int, array<string, mixed>>
      */
     public function history(string|int $peer, int $minId, int $limit): array
     {
@@ -147,15 +148,45 @@ final class MtprotoClient
 
         $messages = [];
         foreach (array_reverse($response['messages'] ?? []) as $raw) {
-            if (($raw['_'] ?? '') !== 'message') {
-                continue;               // служебные события канала не переносим
-            }
-            $wrapped = $this->api()->wrapMessage($raw);
-            if ($wrapped instanceof Message) {
-                $messages[] = $wrapped;
+            if (($raw['_'] ?? '') === 'message') {
+                $messages[] = $raw;      // служебные события канала не переносим
             }
         }
         return $messages;
+    }
+
+    /**
+     * Свежие копии сообщений перед публикацией: ссылки на файлы в Telegram
+     * живут недолго, поэтому медиа берём заново, а не из базы.
+     *
+     * @param array<int, int> $ids
+     * @return array<int, array<string, mixed>> сообщения по их id
+     */
+    public function messagesByIds(string|int $peer, array $ids): array
+    {
+        if ($ids === []) {
+            return [];
+        }
+        $maxId = max($ids);
+        $response = $this->api()->messages->getHistory([
+            'peer'        => $peer,
+            'offset_id'   => $maxId + 1,
+            'offset_date' => 0,
+            'add_offset'  => 0,
+            'limit'       => max(count($ids), 10),
+            'max_id'      => 0,
+            'min_id'      => 0,
+            'hash'        => 0,
+        ]);
+
+        $found = [];
+        foreach ($response['messages'] ?? [] as $raw) {
+            $id = (int)($raw['id'] ?? 0);
+            if (($raw['_'] ?? '') === 'message' && in_array($id, $ids, true)) {
+                $found[$id] = $raw;
+            }
+        }
+        return $found;
     }
 
     // ── публикация ──────────────────────────────────────────────────────────
@@ -173,20 +204,24 @@ final class MtprotoClient
     /**
      * Публикация медиа с новой подписью. Файл переиспользуется по ссылке
      * (без скачивания и повторной загрузки), поэтому ограничения в 50 МБ нет.
+     *
+     * @param array<string, mixed> $rawMessage сырое сообщение-источник
      */
-    public function sendMedia(string|int $peer, Message $source, string $html, bool $silent = false): int
+    public function sendMedia(string|int $peer, array $rawMessage, string $html, bool $silent = false): int
     {
-        $media = $source->media;
+        $wrapped = $this->api()->wrapMessage($rawMessage);
+        $media = $wrapped instanceof Message ? $wrapped->media : null;
         if ($media === null) {
             return $this->sendText($peer, $html, $silent);
         }
+
         $method = match (true) {
             $media instanceof \danog\MadelineProto\EventHandler\Media\Photo => 'sendPhoto',
             $media instanceof \danog\MadelineProto\EventHandler\Media\Video => 'sendVideo',
             $media instanceof \danog\MadelineProto\EventHandler\Media\Gif   => 'sendGif',
             $media instanceof \danog\MadelineProto\EventHandler\Media\Audio => 'sendAudio',
             $media instanceof \danog\MadelineProto\EventHandler\Media\Voice => 'sendVoice',
-            default                                                         => 'sendDocument',
+            default                                                           => 'sendDocument',
         };
 
         return $this->api()->{$method}(
@@ -196,6 +231,64 @@ final class MtprotoClient
             parseMode: ParseMode::HTML,
             silent: $silent,
         )->id;
+    }
+
+    /**
+     * Альбом: все файлы уходят одной группой, подпись — на первом элементе,
+     * порядок сохраняется. Если Telegram откажет в групповой отправке,
+     * отправляем по одному, чтобы пост не потерялся.
+     *
+     * @param array<int, array<string, mixed>> $rawMessages сырые сообщения альбома по порядку
+     */
+    public function sendAlbum(string|int $peer, array $rawMessages, string $html, bool $silent = false): int
+    {
+        $withMedia = array_values(array_filter($rawMessages, static fn(array $m): bool => isset($m['media'])));
+        if ($withMedia === []) {
+            return $this->sendText($peer, $html, $silent);
+        }
+        if (count($withMedia) === 1) {
+            return $this->sendMedia($peer, $withMedia[0], $html, $silent);
+        }
+
+        $parsed = StrTools::htmlToMessageEntities($html);
+        $multiMedia = [];
+        foreach (array_slice($withMedia, 0, 10) as $index => $raw) {
+            $multiMedia[] = [
+                '_'        => 'inputSingleMedia',
+                'media'    => $raw['media'],
+                'message'  => $index === 0 ? $parsed->message : '',
+                'entities' => $index === 0 ? $parsed->entities : [],
+            ];
+        }
+
+        try {
+            $updates = $this->api()->messages->sendMultiMedia([
+                'peer'        => $peer,
+                'multi_media' => $multiMedia,
+                'silent'      => $silent,
+            ]);
+            return $this->firstMessageId($updates);
+        } catch (\Throwable $e) {
+            $firstId = $this->sendMedia($peer, $withMedia[0], $html, $silent);
+            foreach (array_slice($withMedia, 1, 9) as $raw) {
+                $this->sendMedia($peer, $raw, '', $silent);
+            }
+            return $firstId;
+        }
+    }
+
+    /** Достаёт id первого созданного сообщения из ответа Telegram. */
+    private function firstMessageId(array $updates): int
+    {
+        foreach ($updates['updates'] ?? [] as $update) {
+            if (isset($update['message']['id'])) {
+                return (int)$update['message']['id'];
+            }
+            if (isset($update['id']) && in_array($update['_'] ?? '', ['updateMessageID'], true)) {
+                return (int)$update['id'];
+            }
+        }
+        return 0;
     }
 
     public function close(): void

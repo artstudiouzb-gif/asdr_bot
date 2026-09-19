@@ -13,6 +13,9 @@ declare(strict_types=1);
 use App\Core\Db;
 use App\Core\Env;
 use App\Core\Logger;
+use App\Services\Queue\ClientRegistry;
+use App\Services\Queue\Ingestor;
+use App\Services\Queue\Publisher;
 use App\Services\Telegram\CommandRunner;
 
 require dirname(__DIR__) . '/app/bootstrap.php';
@@ -37,15 +40,33 @@ $counters = ['ingested' => 0, 'published' => 0, 'skipped' => 0, 'errors' => 0];
 $note = null;
 $status = 'ok';
 
+$registry = new ClientRegistry();
+
 try {
     // 1. задания из панели: вход в Telegram, проверка каналов
-    $counters['errors'] += 0;
     $commands = (new CommandRunner())->runQueued();
     if ($commands > 0) {
         echo "Выполнено команд панели: {$commands}\n";
     }
 
-    // 2. сбор и публикация подключаются следующим этапом (Phase 1.2)
+    // 2. новые посты источников → очередь
+    if (microtime(true) < $deadline) {
+        $counters['ingested'] = (new Ingestor($registry))->run($deadline - 10);
+    }
+
+    // 3. очередь → целевые каналы
+    if (microtime(true) < $deadline) {
+        $retryMax = (int)(Db::value('SELECT value FROM settings WHERE `key` = ?', ['retry_max']) ?? 4);
+        $result = (new Publisher($registry, max(1, $retryMax)))->run($deadline);
+        $counters['published'] = $result['published'];
+        $counters['skipped'] = $result['skipped'];
+        $counters['errors'] += $result['errors'];
+    }
+
+    if ($counters['ingested'] > 0 || $counters['published'] > 0) {
+        printf("Получено: %d, опубликовано: %d, пропущено: %d\n",
+            $counters['ingested'], $counters['published'], $counters['skipped']);
+    }
 
     if (microtime(true) >= $deadline) {
         $status = 'partial';
@@ -57,6 +78,7 @@ try {
     $counters['errors']++;
     Logger::error('cron', 'Сбой воркера: ' . $e->getMessage());
 } finally {
+    $registry->closeAll();
     Db::update('cron_runs', [
         'finished_at' => Db::now(),
         'ingested'    => $counters['ingested'],

@@ -20,6 +20,8 @@
         '/sources' => 'Источники',
         '/destinations' => 'Назначения',
         '/routes' => 'Маршруты',
+        '/preview' => 'Предпросмотр',
+        '/logs' => 'Журнал',
     ];
     $active = $activePath ?? '/';
     foreach ($menu as $href => $label):
