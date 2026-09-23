@@ -39,24 +39,36 @@ final class Ingestor
         return $added;
     }
 
+    /** Альбом в Telegram — не больше 10 файлов, меньше порция не имеет смысла. */
+    private const MIN_BATCH = 10;
+
     private function ingestSource(array $source): int
     {
         $client = $this->clients->forAccount($source['account_id'] === null ? null : (int)$source['account_id']);
         $peer = Peer::normalize((string)$source['tg_identifier']);
+        $sourceId = (int)$source['id'];
         $lastId = (int)$source['last_message_id'];
 
-        $messages = $client->history($peer, $lastId, (int)$source['fetch_limit']);
+        if ($lastId === 0) {
+            $lastId = $this->startCursor($client, $peer, $sourceId);
+            if ($lastId === 0) {
+                return 0;                       // канал пуст или только что подключён
+            }
+        }
+
+        $batch = max((int)$source['fetch_limit'], self::MIN_BATCH);
+        $messages = self::holdBackTrailingAlbum($client->history($peer, $lastId, $batch), $batch);
         if ($messages === []) {
             return 0;
         }
 
-        $routes = Db::all('SELECT * FROM routes WHERE source_id = ? AND is_active = 1', [(int)$source['id']]);
+        $routes = Db::all('SELECT * FROM routes WHERE source_id = ? AND is_active = 1', [$sourceId]);
         $added = 0;
         $maxId = $lastId;
 
         foreach ($this->groupAlbums($messages) as $group) {
             $maxId = max($maxId, (int)end($group)['id']);
-            $messageId = $this->storeMessage((int)$source['id'], $group);
+            $messageId = $this->storeMessage($sourceId, $group);
             if ($messageId === null) {
                 continue;                       // уже забирали раньше
             }
@@ -66,9 +78,68 @@ final class Ingestor
             }
         }
 
-        Db::run('UPDATE sources SET last_message_id = ? WHERE id = ? AND last_message_id < ?',
-            [$maxId, (int)$source['id'], $maxId]);
+        $this->moveCursor($sourceId, $maxId);
         return $added;
+    }
+
+    /**
+     * Первое подключение источника: публикуем начиная с текущего момента,
+     * а не всю историю канала. Настройка backfill_on_first_run позволяет
+     * забрать N последних постов.
+     */
+    private function startCursor(\App\Services\Telegram\MtprotoClient $client, string|int $peer, int $sourceId): int
+    {
+        $backfill = max(0, min((int)(Db::value('SELECT value FROM settings WHERE `key` = ?',
+            ['backfill_on_first_run']) ?? 0), 50));
+        $latest = $client->latest($peer, max(1, $backfill));
+        if ($latest === []) {
+            return 0;
+        }
+
+        if ($backfill === 0) {
+            $newest = (int)end($latest)['id'];
+            $this->moveCursor($sourceId, $newest);
+            Logger::info('ingest', 'Источник подключён, публикуем посты новее #' . $newest,
+                ['source_id' => $sourceId]);
+            return 0;
+        }
+
+        $start = max(0, (int)$latest[0]['id'] - 1);
+        $this->moveCursor($sourceId, $start);
+        Logger::info('ingest', 'Источник подключён, забираем последние ' . count($latest) . ' постов',
+            ['source_id' => $sourceId]);
+        return $start;
+    }
+
+    private function moveCursor(int $sourceId, int $messageId): void
+    {
+        Db::run('UPDATE sources SET last_message_id = ? WHERE id = ? AND last_message_id < ?',
+            [$messageId, $sourceId, $messageId]);
+    }
+
+    /**
+     * Если порция заполнена целиком и заканчивается альбомом, его хвост мог не
+     * поместиться. Такой альбом откладываем до следующего запуска целиком,
+     * иначе он ушёл бы в канал двумя половинами.
+     *
+     * @param array<int, array<string, mixed>> $messages по возрастанию id
+     * @return array<int, array<string, mixed>>
+     */
+    public static function holdBackTrailingAlbum(array $messages, int $requested): array
+    {
+        if ($messages === [] || count($messages) < $requested) {
+            return $messages;                   // порция не полная — альбом точно целый
+        }
+        $lastGroup = $messages[count($messages) - 1]['grouped_id'] ?? null;
+        if ($lastGroup === null) {
+            return $messages;
+        }
+        $kept = $messages;
+        while ($kept !== [] && ($kept[count($kept) - 1]['grouped_id'] ?? null) === $lastGroup) {
+            array_pop($kept);
+        }
+        // вся порция — один альбом: он уже полный (больше 10 файлов не бывает)
+        return $kept === [] ? $messages : $kept;
     }
 
     /**

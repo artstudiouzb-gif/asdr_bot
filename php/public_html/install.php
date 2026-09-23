@@ -53,22 +53,29 @@ if ($envExists) {
     $state();
 }
 
-// после установки страница закрывается ключом
-if ($adminExists) {
-    $key = (string)($_GET['key'] ?? $_POST['key'] ?? '');
+// Как только .env создан, установщик открывается только с ключом из него.
+// Иначе в окне между шагами кто угодно мог бы перезаписать .env или первым
+// создать администратора.
+$givenKey = (string)($_GET['key'] ?? $_POST['key'] ?? '');
+if ($envExists) {
     $expected = (string)(Env::get('INSTALL_KEY', '') ?? '');
-    if ($expected === '' || !hash_equals($expected, $key)) {
+    if ($expected === '' || !hash_equals($expected, $givenKey)) {
         http_response_code(403);
-        exit('<p style="font:15px sans-serif;padding:24px">Установка уже выполнена. '
-            . 'Эта страница открывается только с параметром <code>?key=ЗНАЧЕНИЕ_INSTALL_KEY</code> из файла .env. '
-            . '<a href="' . htmlspecialchars(Url::to('/'), ENT_QUOTES) . '">Перейти в панель</a></p>');
+        $hint = $expected === ''
+            ? 'В файле .env нет значения INSTALL_KEY — добавьте туда строку <code>INSTALL_KEY=</code> с любой длинной случайной строкой.'
+            : 'Откройте страницу с параметром <code>?key=</code> и значением INSTALL_KEY из файла .env '
+              . '(файловый менеджер → каталог сайта → .env).';
+        exit('<!doctype html><meta charset="utf-8"><div style="font:15px/1.6 sans-serif;max-width:620px;margin:40px auto;padding:0 16px">'
+            . '<h2>Установка защищена ключом</h2><p>' . $hint . '</p>'
+            . ($adminExists ? '<p><a href="' . htmlspecialchars(Url::to('/'), ENT_QUOTES) . '">Перейти в панель</a></p>' : '')
+            . '</div>');
     }
 }
 
 // ── действия ────────────────────────────────────────────────────────────────
 $action = (string)($_POST['action'] ?? '');
 
-if ($action === 'env' && !$adminExists) {
+if ($action === 'env' && !$envExists) {
     $values = [
         'DB_HOST'     => trim((string)($_POST['db_host'] ?? 'localhost')),
         'DB_PORT'     => trim((string)($_POST['db_port'] ?? '3306')),
@@ -100,10 +107,10 @@ if ($action === 'env' && !$adminExists) {
         $content = buildEnv($values);
         if (@file_put_contents($envPath, $content) !== false) {
             @chmod($envPath, 0600);
-            $messages[] = 'Файл .env создан. Переходим к таблицам.';
-            $envExists = true;
             Env::reload($envPath);
-            $state();
+            $key = (string)(Env::get('INSTALL_KEY', '') ?? '');
+            header('Location: ' . Url::to('/install.php') . '?key=' . rawurlencode($key));
+            exit;
         } else {
             $envDraft = $content;
             $errors[] = 'Каталог недоступен для записи — создайте файл .env вручную, текст ниже.';
@@ -239,6 +246,9 @@ $cronLine = '/usr/bin/php ' . APP_ROOT . '/bin/cron.php';
     <?php if ($envDraft !== null): ?>
       <p style="margin-top:16px"><b>Создайте файл <code>.env</code> в <?= e(APP_ROOT) ?> с таким содержимым:</b></p>
       <pre><?= e($envDraft) ?></pre>
+      <?php preg_match('/^INSTALL_KEY=(.+)$/m', $envDraft, $draftKey); ?>
+      <p>После этого продолжите установку по ссылке:
+        <a href="<?= e(Url::to('/install.php') . '?key=' . rawurlencode($draftKey[1] ?? '')) ?>">продолжить →</a></p>
     <?php endif; ?>
   </div>
 <?php elseif ($step === 2): ?>
@@ -247,7 +257,7 @@ $cronLine = '/usr/bin/php ' . APP_ROOT . '/bin/cron.php';
     <p class="muted">Не применено миграций: <?= count($pending) ?> (<?= e(implode(', ', $pending)) ?>).</p>
     <form method="post">
       <input type="hidden" name="action" value="migrate">
-      <input type="hidden" name="key" value="<?= e((string)($_GET['key'] ?? '')) ?>">
+      <input type="hidden" name="key" value="<?= e($givenKey) ?>">
       <div class="actions"><button type="submit">Создать таблицы</button></div>
     </form>
   </div>
@@ -256,6 +266,7 @@ $cronLine = '/usr/bin/php ' . APP_ROOT . '/bin/cron.php';
     <h2>3. Администратор панели</h2>
     <form method="post">
       <input type="hidden" name="action" value="admin">
+      <input type="hidden" name="key" value="<?= e($givenKey) ?>">
       <label for="username">Логин</label>
       <input id="username" name="username" required autocomplete="username">
       <label for="password">Пароль (минимум 10 символов)</label>
@@ -272,7 +283,7 @@ $cronLine = '/usr/bin/php ' . APP_ROOT . '/bin/cron.php';
     <p class="muted">Если интервал в минуту недоступен, поставьте 5 минут. Если cron умеет только открывать
        адреса, используйте <code><?= e((isset($_SERVER['HTTPS']) ? 'https' : 'http') . '://' . ($_SERVER['HTTP_HOST'] ?? '') . Url::base()) ?>/cron.php?key=ЗНАЧЕНИЕ_CRON_KEY</code>.</p>
     <p style="margin-top:16px"><b>Закройте установку:</b> удалите <code>install.php</code> или сотрите значение
-       <code>INSTALL_KEY</code> в файле .env.</p>
+       <code>INSTALL_KEY</code> в файле .env. Пока ключ есть, установщик открывается только по нему.</p>
   </div>
 <?php endif; ?>
 

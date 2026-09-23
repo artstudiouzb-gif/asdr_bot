@@ -129,11 +129,37 @@ final class MtprotoClient
     }
 
     /**
-     * Новые сообщения канала после $minId, от старых к новым, в исходном виде.
+     * Самые старые сообщения после $minId, по возрастанию id.
+     *
+     * Именно старые, а не последние: если с прошлого запуска вышло больше постов,
+     * чем $limit, остаток заберёт следующий запуск, и ничего не потеряется.
+     * offset_id = minId + 1 с отрицательным add_offset — стандартный способ Telegram
+     * листать историю вперёд от известного сообщения.
      *
      * @return array<int, array<string, mixed>>
      */
     public function history(string|int $peer, int $minId, int $limit): array
+    {
+        $limit = max(1, min($limit, 100));
+        $response = $this->api()->messages->getHistory([
+            'peer'        => $peer,
+            'offset_id'   => $minId + 1,
+            'offset_date' => 0,
+            'add_offset'  => -$limit,
+            'limit'       => $limit,
+            'max_id'      => 0,
+            'min_id'      => max(0, $minId),
+            'hash'        => 0,
+        ]);
+        return $this->onlyMessagesAscending($response['messages'] ?? []);
+    }
+
+    /**
+     * Последние $limit сообщений канала — для первого подключения источника.
+     *
+     * @return array<int, array<string, mixed>>
+     */
+    public function latest(string|int $peer, int $limit): array
     {
         $response = $this->api()->messages->getHistory([
             'peer'        => $peer,
@@ -142,17 +168,21 @@ final class MtprotoClient
             'add_offset'  => 0,
             'limit'       => max(1, min($limit, 100)),
             'max_id'      => 0,
-            'min_id'      => max(0, $minId),
+            'min_id'      => 0,
             'hash'        => 0,
         ]);
+        return $this->onlyMessagesAscending($response['messages'] ?? []);
+    }
 
-        $messages = [];
-        foreach (array_reverse($response['messages'] ?? []) as $raw) {
-            if (($raw['_'] ?? '') === 'message') {
-                $messages[] = $raw;      // служебные события канала не переносим
-            }
-        }
-        return $messages;
+    /** @return array<int, array<string, mixed>> */
+    private function onlyMessagesAscending(array $messages): array
+    {
+        $result = array_values(array_filter(
+            $messages,
+            static fn(array $raw): bool => ($raw['_'] ?? '') === 'message'   // служебные события не переносим
+        ));
+        usort($result, static fn(array $a, array $b): int => (int)$a['id'] <=> (int)$b['id']);
+        return $result;
     }
 
     /**
@@ -257,7 +287,9 @@ final class MtprotoClient
                 '_'        => 'inputSingleMedia',
                 'media'    => $raw['media'],
                 'message'  => $index === 0 ? $parsed->message : '',
-                'entities' => $index === 0 ? $parsed->entities : [],
+                'entities' => $index === 0
+                    ? array_map(static fn($entity) => $entity->toMTProto(), $parsed->entities)
+                    : [],
             ];
         }
 

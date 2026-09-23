@@ -16,19 +16,17 @@ $root = dirname(__DIR__);
 $dist = $root . '/deploy/dist';
 $zipPath = $root . '/deploy/reposter-release.zip';
 
-if (!is_file($root . '/vendor/autoload.php')) {
-    fwrite(STDERR, "Нет vendor/. Выполните: composer install --no-dev --prefer-dist\n");
-    exit(1);
-}
+$vendor = productionVendor($root);
 
 echo "Готовлю дерево релиза…\n";
 removeDirectory($dist);
 mkdir($dist . '/reposter', 0755, true);
 mkdir($dist . '/panel', 0755, true);
 
-foreach (['app', 'bin', 'db', 'vendor', 'public_html'] as $directory) {
+foreach (['app', 'bin', 'db', 'public_html'] as $directory) {
     copyTree($root . '/' . $directory, $dist . '/reposter/' . $directory);
 }
+copyTree($vendor, $dist . '/reposter/vendor');
 foreach (['logs', 'tmp', 'telegram'] as $directory) {
     mkdir($dist . '/reposter/storage/' . $directory, 0700, true);
     file_put_contents($dist . '/reposter/storage/' . $directory . '/.gitkeep', '');
@@ -78,6 +76,45 @@ $zip->close();
 printf("Готово: %s (%.1f МБ), дерево: %s\n", $zipPath, filesize($zipPath) / 1048576, $dist);
 
 // ── функции ────────────────────────────────────────────────────────────────
+
+/**
+ * vendor без dev-пакетов собирается во временном каталоге, чтобы рабочий
+ * vendor разработчика (с PHPUnit) оставался нетронутым.
+ */
+function productionVendor(string $root): string
+{
+    $composer = trim((string)shell_exec('command -v composer 2>/dev/null'));
+    if ($composer === '') {
+        if (!is_file($root . '/vendor/autoload.php')) {
+            fwrite(STDERR, "Нет ни composer, ни vendor/ — сборка невозможна\n");
+            exit(1);
+        }
+        fwrite(STDERR, "composer не найден — беру текущий vendor/ как есть\n");
+        return $root . '/vendor';
+    }
+
+    $work = sys_get_temp_dir() . '/reposter-build-' . getmypid();
+    removeDirectory($work);
+    mkdir($work, 0755, true);
+    copy($root . '/composer.json', $work . '/composer.json');
+    copy($root . '/composer.lock', $work . '/composer.lock');
+    mkdir($work . '/app', 0755, true);      // для classmap PSR-4 App\\ → app/
+    copyTree($root . '/app', $work . '/app');
+
+    echo "Собираю зависимости без dev…\n";
+    $command = sprintf(
+        'cd %s && COMPOSER_ALLOW_SUPERUSER=1 %s install --no-dev --prefer-dist --optimize-autoloader '
+        . '--no-interaction --no-progress --quiet 2>&1',
+        escapeshellarg($work), escapeshellarg($composer)
+    );
+    exec($command, $output, $code);
+    if ($code !== 0) {
+        fwrite(STDERR, "composer install не удался:\n" . implode("\n", $output) . "\n");
+        exit(1);
+    }
+    register_shutdown_function(static fn() => removeDirectory($work));
+    return $work . '/vendor';
+}
 
 function copyTree(string $from, string $to): void
 {
