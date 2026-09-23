@@ -14,7 +14,7 @@
           <td><?= (int)$route['delay_seconds'] ?> с</td>
           <td class="muted">
             правила: <?= e($route['rule_set_name'] ?? 'по умолчанию') ?><br>
-            подпись: <?= e($route['signature_name'] ?? 'по умолчанию') ?><br>
+            подпись: <?= e((int)($route['no_signature'] ?? 0) === 1 ? 'без подписи' : ($route['signature_name'] ?? 'по умолчанию')) ?><br>
             медиа: <?= e(match ($route['media_mode']) {
                 'text_only' => 'только текст', 'skip_media' => 'пропускать посты с медиа', default => 'как в источнике' }) ?>
           </td>
@@ -86,7 +86,10 @@
         <div>
           <label for="<?= $field ?>"><?= e($label) ?></label>
           <select id="<?= $field ?>" name="<?= $field ?>">
-            <option value="0">по умолчанию</option>
+            <option value="0"><?= $field === 'filter_set_id' ? 'без фильтров' : 'по умолчанию' ?></option>
+            <?php if ($field === 'signature_id'): ?>
+              <option value="-1"<?= (int)($edit['no_signature'] ?? 0) === 1 ? ' selected' : '' ?>>без подписи</option>
+            <?php endif; ?>
             <?php foreach ($options as $option): ?>
               <option value="<?= (int)$option['id'] ?>"<?= (int)($edit[$field] ?? 0) === (int)$option['id'] ? ' selected' : '' ?>>
                 <?= e($option['name']) ?></option>

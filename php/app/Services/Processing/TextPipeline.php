@@ -33,9 +33,11 @@ final class TextPipeline
                 [(int)$ruleSetId]);
 
         $signatureId = $route['signature_id'] ?? null;
-        $signature = $signatureId === null
+        $signature = (int)($route['no_signature'] ?? 0) === 1
+            ? null
+            : ($signatureId === null
             ? Db::one('SELECT * FROM signatures WHERE is_default = 1 AND is_active = 1 ORDER BY id LIMIT 1')
-            : Db::one('SELECT * FROM signatures WHERE id = ?', [(int)$signatureId]);
+            : Db::one('SELECT * FROM signatures WHERE id = ?', [(int)$signatureId]));
 
         $filterSetId = $route['filter_set_id'] ?? null;
         $filters = $filterSetId === null

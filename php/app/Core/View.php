@@ -31,7 +31,12 @@ final class View
     {
         extract($data, EXTR_SKIP);
         ob_start();
-        require $file;
+        try {
+            require $file;
+        } catch (\Throwable $e) {
+            ob_end_clean();     // недорисованная страница не должна уйти в ответ вместе с ошибкой
+            throw $e;
+        }
         return (string)ob_get_clean();
     }
 }

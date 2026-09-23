@@ -32,6 +32,12 @@ abstract class Controller
         return null;
     }
 
+    /** Вход + CSRF — для всех изменяющих запросов. */
+    protected function guardPost(): ?Response
+    {
+        return $this->requireAuth() ?? $this->requireCsrf();
+    }
+
     protected function back(string $path, string $message = '', string $error = ''): Response
     {
         $query = [];

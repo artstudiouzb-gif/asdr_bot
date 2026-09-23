@@ -89,8 +89,7 @@ final class Ingestor
      */
     private function startCursor(\App\Services\Telegram\MtprotoClient $client, string|int $peer, int $sourceId): int
     {
-        $backfill = max(0, min((int)(Db::value('SELECT value FROM settings WHERE `key` = ?',
-            ['backfill_on_first_run']) ?? 0), 50));
+        $backfill = max(0, min(\App\Core\Settings::int('backfill_on_first_run'), 50));
         $latest = $client->latest($peer, max(1, $backfill));
         if ($latest === []) {
             return 0;

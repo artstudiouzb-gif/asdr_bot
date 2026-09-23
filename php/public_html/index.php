@@ -6,9 +6,13 @@ use App\Controllers\AccountsController;
 use App\Controllers\AuthController;
 use App\Controllers\DashboardController;
 use App\Controllers\DestinationsController;
+use App\Controllers\FiltersController;
 use App\Controllers\LogsController;
 use App\Controllers\PreviewController;
+use App\Controllers\RulesController;
 use App\Controllers\RoutesController;
+use App\Controllers\SettingsController;
+use App\Controllers\SignaturesController;
 use App\Controllers\SourcesController;
 use App\Core\Request;
 use App\Core\Router;
@@ -60,5 +64,34 @@ $router->post('/preview', [$preview, 'process']);
 $logs = new LogsController($request);
 $router->get('/logs', [$logs, 'index']);
 $router->post('/logs/{id}/retry', [$logs, 'retry']);
+
+$rules = new RulesController($request);
+$router->get('/rules', [$rules, 'index']);
+$router->post('/rules/save', [$rules, 'save']);
+$router->post('/rules/{id}/toggle', [$rules, 'toggle']);
+$router->post('/rules/{id}/delete', [$rules, 'delete']);
+$router->post('/rule-sets/save', [$rules, 'saveSet']);
+$router->post('/rule-sets/{id}/default', [$rules, 'makeDefault']);
+$router->post('/rule-sets/{id}/delete', [$rules, 'deleteSet']);
+
+$signatures = new SignaturesController($request);
+$router->get('/signatures', [$signatures, 'index']);
+$router->post('/signatures/save', [$signatures, 'save']);
+$router->post('/signatures/{id}/toggle', [$signatures, 'toggle']);
+$router->post('/signatures/{id}/delete', [$signatures, 'delete']);
+
+$filters = new FiltersController($request);
+$router->get('/filters', [$filters, 'index']);
+$router->post('/filters/save', [$filters, 'save']);
+$router->post('/filters/{id}/toggle', [$filters, 'toggle']);
+$router->post('/filters/{id}/delete', [$filters, 'delete']);
+$router->post('/filter-sets/save', [$filters, 'saveSet']);
+$router->post('/filter-sets/{id}/delete', [$filters, 'deleteSet']);
+
+$settings = new SettingsController($request);
+$router->get('/settings', [$settings, 'index']);
+$router->post('/settings/save', [$settings, 'save']);
+$router->post('/settings/password', [$settings, 'password']);
+$router->post('/settings/sessions', [$settings, 'endSessions']);
 
 $router->dispatch($request)->send();

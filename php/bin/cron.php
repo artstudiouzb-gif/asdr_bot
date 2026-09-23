@@ -13,6 +13,7 @@ declare(strict_types=1);
 use App\Core\Db;
 use App\Core\Env;
 use App\Core\Logger;
+use App\Core\Settings;
 use App\Services\Queue\ClientRegistry;
 use App\Services\Queue\Ingestor;
 use App\Services\Queue\Publisher;
@@ -56,8 +57,8 @@ try {
 
     // 3. очередь → целевые каналы
     if (microtime(true) < $deadline) {
-        $retryMax = (int)(Db::value('SELECT value FROM settings WHERE `key` = ?', ['retry_max']) ?? 4);
-        $result = (new Publisher($registry, max(1, $retryMax)))->run($deadline);
+        $result = (new Publisher($registry, max(1, Settings::int('retry_max'))))
+            ->run($deadline, max(1, Settings::int('publish_batch')));
         $counters['published'] = $result['published'];
         $counters['skipped'] = $result['skipped'];
         $counters['errors'] += $result['errors'];

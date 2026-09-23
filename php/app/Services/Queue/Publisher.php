@@ -67,7 +67,7 @@ final class Publisher
                     s.tg_identifier AS source_peer, s.account_id AS source_account_id, s.name AS source_name,
                     d.tg_identifier AS destination_peer, d.account_id AS destination_account_id,
                     d.publish_as, d.rate_limit_per_min, d.name AS destination_name,
-                    r.rule_set_id, r.signature_id, r.filter_set_id, r.media_mode
+                    r.rule_set_id, r.signature_id, r.no_signature, r.filter_set_id, r.media_mode
              FROM publications p
              JOIN messages m ON m.id = p.message_id
              JOIN sources s ON s.id = m.source_id

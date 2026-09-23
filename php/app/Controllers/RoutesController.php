@@ -69,6 +69,7 @@ final class RoutesController extends Controller
                 ? $this->request->input('media_mode') : 'all',
             'rule_set_id'    => $optional($this->request->int('rule_set_id')),
             'signature_id'   => $optional($this->request->int('signature_id')),
+            'no_signature'   => $this->request->int('signature_id') === -1 ? 1 : 0,
             'filter_set_id'  => $optional($this->request->int('filter_set_id')),
             'is_active'      => $this->request->bool('is_active') ? 1 : 0,
         ];
